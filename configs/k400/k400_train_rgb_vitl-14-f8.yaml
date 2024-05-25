@@ -1,0 +1,63 @@
+resume: 
+pretrain:
+seed: 1024
+if_fusion_only: True
+working_dir: '/data/video_exp/exp'
+data:
+    dataset: k400
+    modality: RGB
+    num_segments: 16
+    seg_length: 1
+    batch_size: 17
+    workers: 8
+    num_classes: 400
+    image_tmpl: 'img_{:05d}.jpg'
+
+    # #paddle2
+    # train_root: '/opt/data/private/dataset/k400_paddle_frame_2/train'
+    # train_list: '/opt/data/private/lyx/code/Text4Vis-origin/datalist/kinetics400/kinetics_video_train.txt'
+    # val_root: /opt/data/private/dataset/k400_paddle_frame_2/val
+    # val_list: /opt/data/private/lyx/code/Text4Vis-origin/datalist/kinetics400/kinetics_video_val.txt
+    # label_list: '/opt/data/private/lyx/code/Text4Vis-origin/lists/kinetics_400_labels.csv'
+
+    #mmaction
+    # train_root: '/opt/data/private/dataset/Kinetics-400/frame/rawframes_train'
+    # train_list: '/opt/data/private/lyx/code/Text4Vis-origin/datalist/kinetics400/kinetics_rgb_train.txt'
+    data_root: '/data/video_dataset/k400/clip_feature'
+    val_root: '/data/video_dataset/k400/frame/rawframes_val'
+    val_list: '/home/lyx/code/Text4Vis-main/datalist/kinetics400/kinetics_rgb_val.txt'
+    label_list: '/home/lyx/code/Text4Vis-main/lists/kinetics_400_labels.csv'
+
+    input_size: 224
+    randaug:
+        N: 2 #2
+        M: 9  #9
+    random_shift: True
+network:
+    arch: ViT-L/14  #ViT-B/32 ViT-B/16
+    init: True
+    tm: False  # False tsm tokent1d tokenshift
+    drop_out: 0.0 
+    emb_dropout: 0.0 
+    type: clip_k400
+    sim_header: Transf  # Transf   None  
+    joint_st: False
+    drop: 0      
+    fix_text: True  
+    fix_video: False        
+solver:
+    type: cosine
+    epochs: 30
+    start_epoch: 0
+    epoch_offset: 0
+    optim: adamw
+    lr: 3.e-4
+    lr_warmup_step: 5
+    weight_decay: 0.02
+    loss_type: CE
+    evaluate: False
+    clip_ratio: 0.1
+    grad_accumulation_steps: 2
+logging:
+    print_freq: 10
+    eval_freq: 15
