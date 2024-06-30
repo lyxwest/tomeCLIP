@@ -1,14 +1,12 @@
 import numpy as np
 import torch
 
-import math
-
 import torch
 from torch import nn
 import numpy as np
 import torch.nn.functional as F
 import scipy.sparse as sp
-import torch.utils.model_zoo as model_zoo
+# import torch.utils.model_zoo as model_zoo
 
 def create_adj( H, W, C, neibour):
     """
@@ -145,25 +143,24 @@ class GraphAttentionLayer(nn.Module):
 
 		if self.use_sgat:
 			adj = create_adj(h,w,self.in_features,8)
-			#print('图片的维度：',x.size())
-			alpha = self.down_alpha(x)#concat的时候不太一样
-			#print('alpha :',alpha.shape)
-			#print('alpha.shape:',alpha.shape)
+			# print('图片的维度：',x.size())                                   # torch.Size([2, 64, 224, 224])
+			alpha = self.down_alpha(x)#concat的时候不太一样                 
+			# print('alpha.shape:',alpha.shape)                               # alpha: torch.Size([2, 8, 224, 224])
 			sigma = self.down_sigma(x)
-			#print('sigma :',sigma.shape)
-			alpha = alpha.view(b, self.hid_features, -1).permute(0, 2, 1) #8 32 64*32	
-			#print('转换后alpha :',alpha.shape)
+			# print('sigma :',sigma.shape)                                    # sigma: torch.Size([2, 8, 224, 224])
+			alpha = alpha.view(b, self.hid_features, -1).permute(0, 2, 1)	
+			# print('转换后alpha :',alpha.shape)                               # alpha: torch.Size([2, 50176, 8])
 			sigma = sigma.view(b, self.hid_features, -1)
-			#print('转换后sigma :',sigma.shape)
-			att = torch.matmul(alpha, sigma) #这就是每个图的自注意力机制
-			#print('alpha乘sigma得到大的att shape:',att.shape)
+			# print('转换后sigma :',sigma.shape)                               # sigma: torch.Size([2, 8, 50176])
+			att = torch.matmul(alpha, sigma)                                   #这就是每个图的自注意力机制
+			# print('alpha乘sigma得到大的att shape:',att.shape)                 # att shape: torch.Size([2, 50176, 50176])
 			zero_vec = -9e15*torch.ones_like(att)
 			attention = torch.where(adj.expand_as(att)> 0, att,zero_vec)
-			#print('attention shape:',attention.shape)
+			# print('attention shape:',attention.shape)                        # attention shape: torch.Size([2, 50176, 50176])
 			attention = F.softmax(attention, dim=2)  # 计算节点，临近节点的关系，因为attention为3维 b h w 按行求则为
-			#print('softmax(attention) shape:',attention.shape)
+			# print('softmax(attention) shape:',attention.shape)               # shape: torch.Size([2, 50176, 50176])
 			h_s = torch.matmul(attention, x.view(b, c, -1).permute(0, 2, 1)).permute(0,2,1).view(b,c,h,w)  #聚合临近节点的信息表示该节点
-			#print('图上传播后',h_prime.shape)
+			# print('图上传播后',h_s.shape)                                     # torch.Size([2, 64, 224, 224])
 		if self.use_cgat:
 			cadj = create_adj(h,w,c,2)#2表示通道的adj未进行节点维度的变化，直接点乘和sigmod计算的att
 			theta_xc = x.view(b, c, -1)
@@ -188,18 +185,22 @@ import torch.nn.functional as F
 # 创建示例输入张量
 batch_size = 2
 in_channels = 64
-height = 14 
-width = 14
+height = 224
+width = 224
 x = torch.randn(batch_size, in_channels, height, width)
+print("x size:", x.shape)
+# adj = create_adj(224, 224, 3, 8)
+# print(adj)
+
 # 实例化GraphAttentionLayer
 layer = GraphAttentionLayer(in_features=in_channels, down_ratio=8, sgat_on=True, cgat_on=True)
 out = layer(x)
-print(out.shape)
+print("ooutput size:", out.shape)
 
-# 只测试空间图注意力
-layer = GraphAttentionLayer(in_features=in_channels, down_ratio=8, sgat_on=True, cgat_on=False) 
-out = layer(x)
+# # 只测试空间图注意力
+# layer = GraphAttentionLayer(in_features=in_channels, down_ratio=8, sgat_on=True, cgat_on=False) 
+# out = layer(x)
 
-# 只测试通道图注意力
-layer = GraphAttentionLayer(in_features=in_channels, down_ratio=8, sgat_on=False, cgat_on=True)
-out = layer(x)
+# # 只测试通道图注意力
+# layer = GraphAttentionLayer(in_features=in_channels, down_ratio=8, sgat_on=False, cgat_on=True)
+# out = layer(x)

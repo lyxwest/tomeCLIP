@@ -1,6 +1,7 @@
 pretrain:
 resume:
 seed: 1024
+tome: 16
 data:
     dataset: hmdb51
     modality: RGB

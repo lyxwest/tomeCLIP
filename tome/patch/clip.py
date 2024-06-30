@@ -27,6 +27,8 @@ class ToMeResidualAttentionBlock(nn.Module):
                 attn_mask: Optional[torch.Tensor] = None):
         attn_size = self._tome_info["size"] if self._tome_info["prop_attn"] else None
         
+        # x_attn.shape: torch.Size([64, 257, 1024])
+        # metric.shape: torch.Size([64, 257, 64])
         x_attn, metric = self.attn(self.ln_1(q_x), attn_size)
         x = q_x + self.ls_1(x_attn)
         
@@ -43,8 +45,10 @@ class ToMeResidualAttentionBlock(nn.Module):
                 self._tome_info["source"] = merge_source(
                     merge, x, self._tome_info["source"]
                 )
+            # x.shape: torch.Size([64, 257, 1024])
             x, self._tome_info["size"] = merge_wavg(merge, x, self._tome_info["size"])
-
+            # x.shape: torch.Size([64, 241, 1024])
+            # self._tome_info["size"]: 1
         x = x + self.ls_2(self.mlp(self.ln_2(x)))
         return x
 
@@ -74,9 +78,9 @@ class ToMeAttention(Attention):
             qkv[1],
             qkv[2],
         )  # make torchscript happy (cannot use tensor as tuple)
-
+        # q k v shape: torch.Size([64, 16, 257, 64])
         attn = (q @ k.transpose(-2, -1)) * self.scale
-
+        # attn.shape: torch.Size([64, 16, 257, 257])
         # Apply proportional attention
         if size is not None:
             attn = attn + size.log()[:, None, None, :, 0]
@@ -131,9 +135,11 @@ def make_tome_class(transformer_class):
             #     x = self.patchnorm_pre_ln(x)
             #     x = self.conv1(x)
             # else:
-            x = self.conv1(x)  # shape = [*, width, grid, grid]
-            x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
-            x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
+            # (conv1): Conv2d(3, 1024, kernel_size=(14, 14), stride=(14, 14), bias=False)
+            # print("x:", x.shape) # x: torch.Size([64, 3, 224, 224])
+            x = self.conv1(x)  # shape = [bs*n_seg, demension, 16, 16]
+            x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [bs*n_seg, demension, grid ** 2]
+            x = x.permute(0, 2, 1)  # shape = [*, 256, width]
 
             # class embeddings and positional embeddings
             x = torch.cat(
@@ -155,7 +161,7 @@ def make_tome_class(transformer_class):
             # else:
             #     pooled, tokens = self._global_pool(x)
             #     pooled = self.ln_post(pooled)
-
+            # x.shape: torch.Size([64, 2, 1024])
             if self.proj is not None:
                 # pooled = pooled @ self.proj
                 # print(x.shape)      # torch.Size([1, 65, 1024])

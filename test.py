@@ -173,7 +173,7 @@ def main(args):
 
 
     model_full = VideoCLIP(model, video_head, config.data.num_segments)
-
+    print(model_full)
     if os.path.isfile(args.weights):
         checkpoint = torch.load(args.weights, map_location='cpu')
         if dist.get_rank() == 0:
@@ -219,6 +219,7 @@ def validate_rumtime(val_loader, device, model, config, text_features, test_crop
 
         for i in range(2000):
             image_input = image.to(device).view(-1, c, h, w)
+            print(image_input.shape)
             image_features = model.module.encode_image(image_input)
             cnt_time = time.time() - proc_start_time
     

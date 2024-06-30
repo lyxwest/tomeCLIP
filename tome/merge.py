@@ -40,27 +40,36 @@ def bipartite_soft_matching(
         protected += 1
 
     # We can only reduce by a maximum of 50% tokens
-    t = metric.shape[1]
-    r = min(r, (t - protected) // 2)
+    t = metric.shape[1]                 # token 数量
+    r = min(r, (t - protected) // 2)    # 最多有一半 token 会被 merge
 
     if r <= 0:
         return do_nothing, do_nothing
 
     with torch.no_grad():
-        metric = metric / metric.norm(dim=-1, keepdim=True)
-        a, b = metric[..., ::2, :], metric[..., 1::2, :]
-        scores = a @ b.transpose(-1, -2)
+        metric = metric / metric.norm(dim=-1, keepdim=True) # torch.size([64, 257, 64])
+        a, b = metric[..., ::2, :], metric[..., 1::2, :]    # 在 token 维度上按照奇偶索引进行分割
+        
+        # a.shape: torch.size([64, 129, 64])
+        # b.shape: torch.size([64, 128, 64])
+        scores = a @ b.transpose(-1, -2)                    # 计算奇偶序列的相似性, torch.size([64, 129, 128])
 
         if class_token:
-            scores[..., 0, :] = -math.inf
+            scores[..., 0, :] = -math.inf                   # 相似性设置为无穷大，这些token一定不会被merge
         if distill_token:
             scores[..., :, 0] = -math.inf
 
-        node_max, node_idx = scores.max(dim=-1)
-        edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]
+        # node_max: torch.size([64, 129])
+        # node_idx: torch.size([64, 129])
+        # edge_idx: torch.size([64, 129, 1])
+        node_max, node_idx = scores.max(dim=-1)             # 计算
+        edge_idx = node_max.argsort(dim=-1, descending=True)[..., None]     # 生成分数排序索引
 
-        unm_idx = edge_idx[..., r:, :]  # Unmerged Tokens
-        src_idx = edge_idx[..., :r, :]  # Merged Tokens
+        # unm_idx: torch.size([64, 113, 1])
+        # src_idx: torch.size([64, 16, 1])
+        # dsc_idx: torch.size([64, 16, 1])
+        unm_idx = edge_idx[..., r:, :]  # Unmerged Tokens，r之后的
+        src_idx = edge_idx[..., :r, :]  # Merged Tokens，会合并 r 个
         dst_idx = node_idx[..., None].gather(dim=-2, index=src_idx)
 
         if class_token:
@@ -69,9 +78,12 @@ def bipartite_soft_matching(
 
     def merge(x: torch.Tensor, mode="mean") -> torch.Tensor:
         src, dst = x[..., ::2, :], x[..., 1::2, :]
-        n, t1, c = src.shape
+        n, t1, c = src.shape    # 64, 129, 1024
+        # tensor.gather: 在选择的dim上，根据index顺序选择元素
+        # unm: torch.size([64, 113, 1024])
         unm = src.gather(dim=-2, index=unm_idx.expand(n, t1 - r, c))
         src = src.gather(dim=-2, index=src_idx.expand(n, r, c))
+        # src: torch.size([64, 16, 1024])
         dst = dst.scatter_reduce(-2, dst_idx.expand(n, r, c), src, reduce=mode)
 
         if distill_token:
@@ -219,7 +231,8 @@ def merge_wavg(
 
     x = merge(x * size, mode="sum")
     size = merge(size, mode="sum")
-
+    # x: torch.Size([64, 241, 1024])
+    # size: torch.Size([64, 241, 1])
     x = x / size
     return x, size
 
