@@ -23,7 +23,7 @@ class ToMeResidualAttentionBlock(nn.Module):
     #     self.edge_index = self.create_adj(16, 16, 3, 8)
 
     def pool(self, x, edge_index_list, edge_attr=None, batch=None):
-        pool = SAGPool(1024, ratio=0.99).to(x.device)
+        pool = SAGPool(1024, fix_pool=4,ratio=0.99).to(x.device)
         return pool(x, edge_index_list, edge_attr, batch)
     
     # copy from timm.py,不加则 ls_12报错无定义

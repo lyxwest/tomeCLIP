@@ -32,8 +32,7 @@ class Net(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
-        print("x:", x.shape)
-        print("batch:", batch.shape)
+
         x = F.relu(self.conv1(x, edge_index))
         x, edge_index, _, batch, _ = self.pool1(x, edge_index, None, batch)
         x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)

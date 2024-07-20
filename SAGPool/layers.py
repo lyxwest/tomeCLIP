@@ -7,10 +7,11 @@ import torch
 import math
 
 class SAGPool(torch.nn.Module):
-    def __init__(self,in_channels,ratio=0.8,Conv=GCNConv,non_linearity=torch.tanh):
+    def __init__(self,in_channels,fix_pool=None,ratio=0.8,Conv=GCNConv,non_linearity=torch.relu):
         super(SAGPool,self).__init__()
         self.in_channels = in_channels
         self.ratio = ratio
+        self.fix_pool = fix_pool
         self.score_layer = Conv(in_channels,1)
         self.non_linearity = non_linearity
         
@@ -22,16 +23,19 @@ class SAGPool(torch.nn.Module):
                 batch = edge_index_list[b].new_zeros(x.size(1))
                 batch_list.append(batch)
 
-        x_pool = torch.empty((x.size(0), math.ceil(x.size(1) * self.ratio), x.size(-1))).to(x.device)
+        if self.fix_pool != None:
+            self.ratio = (x.size(1) - self.fix_pool) / x.size(1)
+            x_pool = torch.empty((x.size(0), x.size(1) - self.fix_pool, x.size(-1))).to(x.device)
+        else:
+            x_pool = torch.empty((x.size(0), math.ceil(x.size(1) * self.ratio), x.size(-1))).to(x.device)
         # TODO
         # DGL、pyg
         for b in range(0, x.size(0)):
             score = self.score_layer(x[b],edge_index_list[b]).squeeze()
             perma = topk(score, self.ratio, batch_list[b])
             perm, _= torch.sort(perma)
-            x_pool[b] = x[b][perm]# * self.non_linearity(score[perm]).view(-1, 1)  # 会改变第二维的顺序（点的顺序）
-            # x_pool[b] = torch.cat([x[b], x[b][-1] + torch.zeros(1, x[b][-1].shape[-1], dtype=x.dtype, device=x.device)], dim=0)  # 会改变第二维的顺序（点的顺序）
-            # batch_list[b] = batch_list[b][perm]
+            x_pool[b] = x[b][perm] # * self.non_linearity(score[perm]).view(-1, 1)  # 会改变第二维的顺序（点的顺序）
+
             
             edge_index_list[b], _ = filter_adj(
                 edge_index_list[b], None, perm, num_nodes=score.size(0))
