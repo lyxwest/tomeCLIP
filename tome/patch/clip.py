@@ -23,7 +23,7 @@ class ToMeResidualAttentionBlock(nn.Module):
     #     self.edge_index = self.create_adj(16, 16, 3, 8)
 
     def pool(self, x, edge_index_list, edge_attr=None, batch=None):
-        pool = SAGPool(1024, fix_pool=4,ratio=0.99).to(x.device)
+        pool = SAGPool(1024, fix_pool=8,ratio=0.99).to(x.device)
         return pool(x, edge_index_list, edge_attr, batch)
     
     # copy from timm.py,不加则 ls_12报错无定义
@@ -69,9 +69,12 @@ class ToMeResidualAttentionBlock(nn.Module):
         # 
         # cls token 不进入 pooling
         #
-        cls = torch.unsqueeze(x[:, 0, :], 1)
-        pooled, edge_index_list, _,  _ = self.pool(x[:, 1:, :], edge_index_list, None, None)
-        x = torch.cat([cls, pooled], dim=1)
+        
+        if (x.shape[1] > 128):
+            cls = torch.unsqueeze(x[:, 0, :], 1)
+            pooled, edge_index_list, _,  _ = self.pool(x[:, 1:, :], edge_index_list, None, None)
+            x = torch.cat([cls, pooled], dim=1)
+        # print(x.shape[1] - 1)
         x = x + self.ls_2(self.mlp(self.ln_2(x)))
         return (x, edge_index_list)
 

@@ -39,9 +39,7 @@ class SAGPool(torch.nn.Module):
             
             edge_index_list[b], _ = filter_adj(
                 edge_index_list[b], None, perm, num_nodes=score.size(0))
-            
-        return x_pool, edge_index_list, None, batch_list#, perm
-    
+        return x_pool, edge_index_list, None, batch_list
     
 # class SAGPool(torch.nn.Module):
 #     def __init__(self,in_channels,ratio=0.8,Conv=GCNConv,non_linearity=torch.tanh):
