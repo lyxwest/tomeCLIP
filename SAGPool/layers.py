@@ -6,6 +6,10 @@ from torch.nn import Parameter
 import torch
 import math
 
+import datetime
+
+
+
 class SAGPool(torch.nn.Module):
     def __init__(self,in_channels,fix_pool=None,ratio=0.8,Conv=GCNConv,non_linearity=torch.relu):
         super(SAGPool,self).__init__()
@@ -15,19 +19,37 @@ class SAGPool(torch.nn.Module):
         self.score_layer = Conv(in_channels,1)
         self.non_linearity = non_linearity
         
-    def forward(self, x, edge_index_list, edge_attr=None, batch=None):
-        # edge_index_list = edge_index_list.to(x.device)
+    def forward(self, x, edge_index, edge_attr=None, batch=None):
+        edge_index = edge_index.to(x.device)
+        batch = batch.to(x.device)
         if batch is None:
-            batch_list = []
-            for b in range(0, x.size(0)):
-                batch = edge_index_list[b].new_zeros(x.size(1))
-                batch_list.append(batch)
+            batch = edge_index.new_zeros(x.size(0))
+            
+            
+        self.ratio = (x.size(0) - self.fix_pool) / x.size(0)
+        # if self.fix_pool != None:
+        #     x_pool = torch.empty((x.size(0), x.size(1) - self.fix_pool, x.size(-1))).to(x.device)
+        # else:
+        #     x_pool = torch.empty((x.size(0), math.ceil(x.size(1) * self.ratio), x.size(-1))).to(x.device)
 
-        if self.fix_pool != None:
-            self.ratio = (x.size(1) - self.fix_pool) / x.size(1)
-            x_pool = torch.empty((x.size(0), x.size(1) - self.fix_pool, x.size(-1))).to(x.device)
-        else:
-            x_pool = torch.empty((x.size(0), math.ceil(x.size(1) * self.ratio), x.size(-1))).to(x.device)
+        # print(edge_index.shape, x.shape, batch.shape)
+        score = self.score_layer(x,edge_index).squeeze()
+        # score = torch.ones((x.shape[0]), device=x.device)
+        # print(score.shape, x.shape, edge_index.shape)
+
+        perm = topk(score, self.ratio, batch)
+        # print("3333", x[perm].shape, self.non_linearity(score[perm]).view(-1, 1).shape)
+        x = x[perm] # * self.non_linearity(score[perm]).view(-1, 1)
+
+
+
+        batch = batch[perm]
+        edge_index, edge_attr = filter_adj(
+            edge_index, edge_attr, perm, num_nodes=score.size(0))
+        
+        
+        return x, edge_index, edge_attr, batch # , perm            
+
         # TODO
         # DGL、pyg
         for b in range(0, x.size(0)):
@@ -51,19 +73,20 @@ class SAGPool(torch.nn.Module):
         
 #     def forward(self, x, edge_index, edge_attr=None, batch=None):
 #         edge_index = edge_index.to(x.device)
+#         batch = batch.to(x.device)
 #         if batch is None:
 #             batch = edge_index.new_zeros(x.size(0))
 
 #         # print("edge_index,", edge_index.shape)
-#         # print("1111", x.shape)      # 1111 torch.Size([35518, 128])
+#         # print("1111", x.shape, batch.shape)
 #         score = self.score_layer(x,edge_index).squeeze()
-#         # print("3333", score.shape)  # 2222 torch.Size([35518])
+#         # print("3333", score.shape, batch.shape)
 #         perm = topk(score, self.ratio, batch)
-#         print("3333", x[perm].shape, self.non_linearity(score[perm]).view(-1, 1).shape)
+#         # print("3333", x[perm].shape, self.non_linearity(score[perm]).view(-1, 1).shape)
 #         x = x[perm] * self.non_linearity(score[perm]).view(-1, 1)
-#         # print("4444", x.shape)
+
 #         batch = batch[perm]
 #         edge_index, edge_attr = filter_adj(
 #             edge_index, edge_attr, perm, num_nodes=score.size(0))
 
-#         return x, edge_index, edge_attr, batch, perm
+#         return x, edge_index, edge_attr, batch # , perm

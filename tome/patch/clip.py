@@ -12,6 +12,10 @@ from ..merge import merge_wavg, merge_source, bipartite_soft_matching #bipartite
 
 from SAGPool.layers import SAGPool
 
+import datetime
+
+
+
 class ToMeResidualAttentionBlock(nn.Module):
     """
     Modifications:
@@ -22,9 +26,9 @@ class ToMeResidualAttentionBlock(nn.Module):
     #     super(ToMeResidualAttentionBlock, self).__init__()
     #     self.edge_index = self.create_adj(16, 16, 3, 8)
 
-    def pool(self, x, edge_index_list, edge_attr=None, batch=None):
-        pool = SAGPool(1024, fix_pool=8,ratio=0.99).to(x.device)
-        return pool(x, edge_index_list, edge_attr, batch)
+    def pool(self, x, edge_index, batch_seg, edge_attr=None, batch=None):
+        pool = SAGPool(1024, fix_pool=12*batch_seg,ratio=0.99).to(x.device)
+        return pool(x, edge_index, edge_attr, batch)
     
     # copy from timm.py,不加则 ls_12报错无定义
     def ls_1(self, x):
@@ -39,7 +43,8 @@ class ToMeResidualAttentionBlock(nn.Module):
                 data: tuple,
                 attn_mask: Optional[torch.Tensor] = None):
         
-        q_x, edge_index_list = data
+        # q_x, edge_index, batch = data
+        q_x = data
         
         attn_size = self._tome_info["size"] if self._tome_info["prop_attn"] else None
         
@@ -71,12 +76,19 @@ class ToMeResidualAttentionBlock(nn.Module):
         #
         
         if (x.shape[1] > 128):
+            x_input = x[:, 1:, :]
             cls = torch.unsqueeze(x[:, 0, :], 1)
-            pooled, edge_index_list, _,  _ = self.pool(x[:, 1:, :], edge_index_list, None, None)
+            
+            bn, token, dim = x_input.shape
+            
+            x_input = x_input.reshape(bn * token, dim)
+            # [0, 0, 0 , 1, 1, 1, ... , 63, 63 63]   n*64 batchn[i]
+            pooled, edge_index, _,  batch = self.pool(x_input, edge_index, bn, None, batch)
+            pooled = pooled.reshape(bn, -1, dim)
             x = torch.cat([cls, pooled], dim=1)
-        # print(x.shape[1] - 1)
         x = x + self.ls_2(self.mlp(self.ln_2(x)))
-        return (x, edge_index_list)
+        
+        return (x, edge_index, batch)
 
 
 class ToMeAttention(Attention):
@@ -177,9 +189,13 @@ def make_tome_class(transformer_class):
             # x = self.patch_dropout(x)     # 不注释掉 报错'ToMeVisionTransformer' object has no attribute 'patch_dropout'
             x = self.ln_pre(x)
             # print(self.edge_index_list[0].shape)
-            edge_index_list = adj_to_edge(create_adj(16,16,3,8))
-            x, edge_index_list = self.transformer((x, edge_index_list))
+            
+            edge_index = adj_to_edge(create_adj(16,16,3,8), x.shape[0]).to(x.device)
+            batch = generate_graph_labels(256, x.shape[0]).to(x.device)
+            x, _, _ = self.transformer((x, edge_index, batch))
 
+            # x = self.transformer(x)
+            
             # 不注释会报错
             # if hasattr(self, "attnpool"):
             #     x = self.attnpool(x)
@@ -204,6 +220,16 @@ def make_tome_class(transformer_class):
             return pooled
 
     return ToMeVisionTransformer
+
+
+
+def generate_graph_labels(num_nodes, num_graphs):
+    graph_ids = torch.arange(num_graphs)
+    
+    graph_labels = graph_ids.repeat_interleave(num_nodes)
+    
+    return graph_labels
+
 
 
 def create_adj( H, W, C, neibour):
@@ -303,7 +329,7 @@ def create_adj( H, W, C, neibour):
     return adj
 
 
-def adj_to_edge(adj):
+def adj_to_edge(adj, num_graph):
     h, w = adj.shape
     l = []
     for i in range(0, h):
@@ -312,9 +338,30 @@ def adj_to_edge(adj):
                 # 重复的边
                 l.append((i, j))
                 
-    edge_tensor = torch.stack([torch.tensor(x) for x in zip(*l)], dim=0).cuda()
-    edge_index_list = [edge_tensor.clone() for _ in range(64)]
-    return edge_index_list            
+    # edge_tensor = torch.stack([torch.tensor(x) for x in zip(*l)], dim=0).cuda()
+    # edge_index_list = [edge_tensor.clone() for _ in range(64)]
+    # return edge_index_list            
+
+    # Number of edges found in the adjacency matrix
+    num_edge_per_graph = len(l)
+    
+    # Create a tensor with the edges, considering the offset for each graph
+    edge_index = torch.zeros((2, num_edge_per_graph * num_graph), dtype=torch.long)
+
+    # Iterate over the graphs and add the edges with the correct offset
+    
+    '''
+    图0：0. 100节点。0.1------0.4
+    图1：1. 100节点。+100+1.1------1.4
+    '''
+    
+    for graph_id in range(num_graph):
+        offset = graph_id * h
+        for edge_id, (i, j) in enumerate(l):
+            edge_index[0, graph_id * num_edge_per_graph + edge_id] = i + offset
+            edge_index[1, graph_id * num_edge_per_graph + edge_id] = j + offset
+
+    return edge_index  # [2, num_graph * num_edge_per_graph]
 
 
 # def make_batch(edge_index_list):
