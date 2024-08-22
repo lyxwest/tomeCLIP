@@ -1,7 +1,7 @@
 pretrain:
 resume:
 seed: 1024
-tome: 16
+tome: 4
 data:
     dataset: hmdb51
     modality: RGB
@@ -14,7 +14,7 @@ data:
     train_root: '/data/video_dataset/hmdb51/frame'
     val_root: '/data/video_dataset/hmdb51/frame'
     train_list: 'lists/hmdb51/train_rgb_split_1.txt'
-    val_list: 'lists/hmdb51/val_rgb_split_1.txt'
+    val_list: 'lists/hmdb51/val_rgb_split_1.txt'       #'lists/hmdb51/val_debug.txt' 
     label_list: 'lists/hmdb51_labels.csv'
     input_size: 224
     random_shift: True
